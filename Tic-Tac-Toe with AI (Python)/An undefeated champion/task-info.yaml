@@ -1,0 +1,589 @@
+type: edu
+custom_name: stage5
+files:
+- name: tictactoe.py
+  visible: true
+  text: |
+    # write your code here
+  learner_created: false
+- name: test/tests.py
+  visible: false
+  text: |
+    from copy import copy
+
+    from hstest import StageTest, dynamic_test, TestedProgram, CheckResult
+
+    from util.enum import GameState, CellState
+    from util.grid import Grid
+    from util.minimax import Minimax
+
+
+    class Test:
+        def __init__(self, inp, result, state, additional_contains=None):
+            self.inp = inp
+            self.result = result
+            self.state = state
+            self.additional_contains = additional_contains
+
+
+    class TicTacToeTests(StageTest):
+        easy_ai_moves = [0 for _ in range(9)]
+
+        @dynamic_test(order=1)
+        def test_bad_parameters(self):
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start")
+
+            if "bad parameters" not in output.lower():
+                return CheckResult.wrong("After entering start command with wrong parameters you should print "
+                                         "'Bad parameters!' and ask to enter a command again!")
+
+            output = program.execute("start easy")
+
+            if "bad parameters" not in output.lower():
+                return CheckResult.wrong("After entering start command with wrong parameters you should print "
+                                         "'Bad parameters!' and ask to enter a command again!")
+
+            program.execute("exit")
+
+            if not program.is_finished():
+                return CheckResult.wrong("After entering 'exit' command you should stop the program!")
+
+            return CheckResult.correct()
+
+        @dynamic_test(order=2)
+        def test_grid_output(self):
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start user easy")
+
+            printed_grid = Grid.from_output(output)
+            empty_grid = Grid.from_line("_________")
+
+            if printed_grid != empty_grid:
+                return CheckResult.wrong(f"After starting the program you should print an empty grid!\n"
+                                         f"Correct empty grid:\n{empty_grid}")
+
+            if "enter the coordinates:" not in output.lower():
+                return CheckResult.wrong("After printing an empty grid you should ask to enter cell coordinates!")
+
+            output = program.execute("2 2")
+
+            grid_after_move = Grid.from_output(output)
+            correct_grid_after_move = Grid.from_line("____X____")
+
+            if grid_after_move != correct_grid_after_move:
+                return CheckResult.wrong(f"After making the move wrong grid was printed.\n"
+                                         f"Your grid:\n{grid_after_move}\n"
+                                         f"Correct grid:\n{correct_grid_after_move}")
+
+            if "making move level \"easy\"" not in output.lower().replace("'", "\""):
+                return CheckResult.wrong("After entering a cell coordinates you should print:\n"
+                                         "Making move level \"easy\"")
+
+            grid_after_ai_move = Grid.from_output(output, 2)
+
+            if grid_after_ai_move == grid_after_move:
+                return CheckResult.wrong("After AI move grid wasn't changed!")
+
+            game_grid = grid_after_ai_move
+
+            while True:
+                game_state = game_grid.get_game_state()
+                if game_grid.get_game_state() != GameState.NOT_FINISHED:
+                    if game_state == GameState.X_WIN and "X wins" not in output:
+                        return CheckResult.wrong("You should print 'X wins' if X win the game!")
+                    if game_state == GameState.O_WIN and "O wins" not in output:
+                        return CheckResult.wrong("You should print 'O wins' if O win the game!")
+                    if game_state == GameState.DRAW and "Draw" not in output:
+                        return CheckResult.wrong("You should print 'Draw' if the game ends with draw!")
+                    break
+
+                next_move = Minimax.get_move(game_grid, CellState.X)
+                temp_grid = copy(game_grid)
+
+                temp_grid.set_cell(next_move.x, next_move.y, CellState.X)
+
+                output = program.execute(f"{next_move.x + 1} {next_move.y + 1}")
+
+                game_grid = Grid.from_output(output)
+
+                if game_grid != temp_grid:
+                    return CheckResult.wrong(f"After making move ({next_move}) the grid is wrong!\n"
+                                             f"Your grid:\n{game_grid}\n"
+                                             f"Correct grid:\n{temp_grid}")
+
+                if game_grid.get_game_state() != GameState.NOT_FINISHED:
+                    continue
+
+                game_grid = Grid.from_output(output, 2)
+
+            return CheckResult.correct()
+
+        @dynamic_test(repeat=100, order=3)
+        def check_easy_ai(self):
+
+            program = TestedProgram()
+            program.start()
+
+            program.execute("start user easy")
+
+            output = program.execute("2 2")
+
+            grid_after_ai_move = Grid.from_output(output, 2)
+
+            cells = grid_after_ai_move.get_grid()
+
+            for i in range(9):
+                if i == 4:
+                    continue
+
+                if cells[int(i / 3)][i % 3] == CellState.O:
+                    self.easy_ai_moves[i] += 1
+
+            return CheckResult.correct()
+
+        @dynamic_test(order=4)
+        def check_random(self):
+
+            average_score = 0
+
+            for i in range(len(self.easy_ai_moves)):
+                average_score += (i + 1) * self.easy_ai_moves[i]
+
+            average_score /= 8
+
+            expected_value = (1 + 2 + 3 + 4 + 6 + 7 + 8 + 9) * 100 / 8 / 8
+
+            if abs(average_score - expected_value) > 20:
+                return CheckResult.wrong("Looks like your Easy level AI doesn't make a random move!")
+
+            return CheckResult.correct()
+
+        is_easy_not_moving_like_medium = False
+
+        @dynamic_test(repeat=30, order=5)
+        def check_easy_not_moving_like_medium(self):
+
+            if self.is_easy_not_moving_like_medium:
+                return CheckResult.correct()
+
+            program = TestedProgram()
+            program.start()
+
+            program.execute("start user easy")
+
+            output = program.execute("2 2")
+
+            game_grid = Grid.from_output(output, 2)
+
+            cells = game_grid.get_grid()
+
+            if cells[0][0] == CellState.EMPTY and cells[2][2] == CellState.EMPTY:
+                output = program.execute("1 1")
+                game_grid = Grid.from_output(output, 2)
+                if game_grid.get_grid()[2][2] == CellState.EMPTY:
+                    self.is_easy_not_moving_like_medium = True
+            else:
+                output = program.execute("1 3")
+                game_grid = Grid.from_output(output, 2)
+                if game_grid.get_grid()[2][0] == CellState.EMPTY:
+                    self.is_easy_not_moving_like_medium = True
+
+            return CheckResult.correct()
+
+        @dynamic_test(order=6)
+        def check_easy_not_moving_like_medium_after(self):
+            if not self.is_easy_not_moving_like_medium:
+                return CheckResult.wrong("Looks like your Easy level AI doesn't make a random move!")
+            return CheckResult.correct()
+
+        @dynamic_test(order=7)
+        def check_easy_vs_easy(self):
+
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start easy easy")
+
+            grids = Grid.all_grids_from_output(output)
+
+            Grid.check_grid_sequence(grids)
+
+            return CheckResult.correct()
+
+        @dynamic_test(repeat=10, order=8)
+        def check_medium_ai(self):
+
+            program = TestedProgram()
+            program.start()
+            program.execute("start user medium")
+
+            output = program.execute("2 2")
+
+            game_grid = Grid.from_output(output, 2)
+
+            cells = game_grid.get_grid()
+
+            if cells[0][0] == CellState.EMPTY and cells[2][2] == CellState.EMPTY:
+                output = program.execute("1 1")
+                game_grid = Grid.from_output(output, 2)
+                if game_grid.get_grid()[2][2] == CellState.EMPTY:
+                    return CheckResult.wrong("Looks like your Medium level AI doesn't make a correct move!")
+            else:
+                output = program.execute("1 3")
+                game_grid = Grid.from_output(output, 2)
+                if game_grid.get_grid()[2][0] == CellState.EMPTY:
+                    return CheckResult.wrong("Looks like your Medium level AI doesn't make a correct move!")
+
+            return CheckResult.correct()
+
+        @dynamic_test(order=9)
+        def check_medium_vs_medium(self):
+
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start medium medium")
+
+            grids = Grid.all_grids_from_output(output)
+
+            Grid.check_grid_sequence(grids)
+
+            return CheckResult.correct()
+
+        is_medium_not_moving_like_hard = False
+
+        @dynamic_test(repeat=30, order=10)
+        def check_medium_not_moving_like_hard(self):
+
+            if self.is_medium_not_moving_like_hard:
+                return CheckResult.correct()
+
+            program = TestedProgram()
+            program.start()
+
+            program.execute("start user medium")
+
+            output = program.execute("2 2")
+
+            user_move_grid = Grid.from_output(output, 1)
+            medium_move_grid = Grid.from_output(output, 2)
+
+            medium_move = Grid.get_move(user_move_grid, medium_move_grid)
+
+            minimax_correct_positions = Minimax.get_available_positions(user_move_grid, CellState.O)
+
+            if medium_move not in minimax_correct_positions:
+                self.is_medium_not_moving_like_hard = True
+
+            return CheckResult.correct()
+
+        @dynamic_test(order=11)
+        def check_medium_not_moving_like_hard_after(self):
+            if not self.is_medium_not_moving_like_hard:
+                return CheckResult.wrong("Looks like Medium level AI doesn't make a random move!")
+            return CheckResult.correct()
+
+        @dynamic_test(order=12)
+        def check_hard_ai(self):
+
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start user hard")
+
+            grid = Grid.from_output(output)
+
+            next_move = Minimax.get_move(grid, CellState.X)
+
+            output = program.execute(f"{next_move.x + 1} {next_move.y + 1}")
+
+            while "win" not in output.lower() and "draw" not in output.lower():
+                grid_after_user_move = Grid.from_output(output)
+                grid_after_ai_move = Grid.from_output(output, 2)
+
+                ai_move = Grid.get_move(grid_after_user_move, grid_after_ai_move)
+
+                correct_minimax_positions = Minimax.get_available_positions(grid_after_user_move, CellState.O)
+
+                if ai_move not in correct_minimax_positions:
+                    return CheckResult.wrong("Your minimax algorithm is wrong! It chooses wrong positions to make a move!")
+
+                next_move = Minimax.get_move(grid_after_ai_move, CellState.X)
+
+                output = program.execute(f"{next_move.x + 1}  {next_move.y + 1}")
+
+            return CheckResult.correct()
+
+        @dynamic_test(repeat=5, order=13)
+        def check_hard_vs_hard(self):
+
+            program = TestedProgram()
+            program.start()
+
+            output = program.execute("start hard hard")
+
+            if "draw" not in output.lower():
+                return CheckResult.wrong(
+                    "The result of the game between minimax algorithms should be always 'Draw'!\n"
+                    "Make sure your output contains 'Draw'.")
+
+            return CheckResult.correct()
+
+
+    if __name__ == '__main__':
+        TicTacToeTests().run_tests()
+  learner_created: false
+- name: tests.py
+  visible: false
+  text: |
+    from test.tests import TicTacToeTests
+
+    if __name__ == '__main__':
+        TicTacToeTests().run_tests()
+  learner_created: false
+- name: User_Inputs.py
+  visible: true
+  text: |+
+    from enum import Enum
+
+
+    class user_inputs(Enum):
+        START = 'start'
+        EXIT = 'exit'
+        EASY = 'easy'
+        MEDIUM = 'medium'
+        USER = 'user'
+
+  learner_created: true
+- name: Board.py
+  visible: true
+  text: |
+    import random
+    from User_Inputs import user_inputs
+
+
+    class Board:
+        PLAY_X = 'X'
+        PLAY_O = 'O'
+
+        def __init__(self):
+            self.matrix = []
+            self.plays = [[0, 0], [0, 1], [0, 2],
+                          [1, 0], [1, 1], [1, 2],
+                          [2, 0], [2, 1], [2, 2]]
+            self.move = self.PLAY_X
+            self.win_or_draw = False
+            self.setUpBoard()
+
+        def setUpBoard(self):
+            counter = 0
+            for i in range(3):
+                self.matrix.append([])
+                for j in range(3):
+                    self.matrix[i].append('_')
+                    counter += 1
+
+        def printBoard(self):
+            print('---------')
+            for line in self.matrix:
+                print('|', end='')
+                print(" ", end='')
+                for item in line:
+                    if item == '_':
+                        print(" ", end='')
+                        print(" ", end='')
+                    else:
+                        print(item, end='')
+                        print(" ", end='')
+                print('|')
+
+            print('---------')
+
+        def play(self, user_input):
+
+            def checkForCondition():
+                for i in range(2):
+                    # check for win in vertical
+                    if all(ele == self.matrix[i][0] for ele in self.matrix[i]) and self.matrix[i][0] != '_':
+                        print(f'{self.matrix[i][0]} wins')
+                        self.win_or_draw = True
+                        break
+                    # check for win in horizontal
+                    if self.matrix[0][i] == self.matrix[1][i] and self.matrix[0][i] == self.matrix[2][i] and self.matrix[0][
+                        i] != '_':
+                        print(f'{self.matrix[0][0]} wins')
+                        self.win_or_draw = True
+                        break
+
+                if self.matrix[0][0] == self.matrix[1][1] and self.matrix[0][0] == self.matrix[2][2] and self.matrix[0][
+                    0] != '_':
+                    print(f'{self.matrix[0][0]} wins')
+                    self.win_or_draw = True
+                elif self.matrix[0][2] == self.matrix[1][1] and self.matrix[0][2] == self.matrix[2][0] and self.matrix[0][
+                    2] != '_':
+                    print(f'{self.matrix[0][2]} wins')
+                    self.win_or_draw = True
+
+                elif self.matrix[0].count('_') == 0 and self.matrix[1].count('_') == 0 and self.matrix[2].count('_') == 0:
+                    print('Draw')
+                    self.win_or_draw = True
+
+            def user_move():
+                # check input from player
+                acceptable = False
+                while not acceptable:
+                    coordinates = input('Enter the coordinates: ')
+                    coordinate = coordinates.split()
+
+                    if len(coordinate) != 2 or not coordinate[0].isnumeric() or not coordinate[1].isnumeric():
+                        print('You should enter numbers!')
+                        continue
+
+                    coor1 = int(coordinate[0]) - 1
+                    coor2 = int(coordinate[1]) - 1
+
+                    if coor1 > 2 or coor2 > 2:
+                        print('Coordinates should be from 1 to 3!')
+                        continue
+
+                    if self.matrix[coor1][coor2] != '_':
+                        print('This cell is occupied! Choose another one!')
+                        continue
+                    else:
+                        acceptable = True
+                        self.matrix[coor1][coor2] = self.move
+                        self.plays.remove([coor1, coor2])
+                        if self.move == self.PLAY_X:
+                            self.move = self.PLAY_O
+                        else:
+                            self.move = self.PLAY_X
+
+                    self.printBoard()
+                    checkForCondition()
+
+            def random_play():
+                ai_play = self.plays[random.randint(0, len(self.plays) - 1)]
+                self.matrix[ai_play[0]][ai_play[1]] = self.move
+                self.plays.remove(ai_play)
+                if self.move == self.PLAY_X:
+                    self.move = self.PLAY_O
+                else:
+                    self.move = self.PLAY_X
+
+            def pos_play(y, x):
+                self.matrix[y][x] = self.move
+                self.plays.remove([y, x])
+
+                if self.move == self.PLAY_X:
+                    self.move = self.PLAY_O
+                else:
+                    self.move = self.PLAY_X
+
+            def AI_move(user):
+
+                if user == 'easy':
+                    print('Making move level "easy"')
+                    random_play()
+
+                elif user == 'medium':
+                    print('Making move level "medium"')
+                    current = self.move
+
+                    # check for a wining move horizontal
+                    for i in range(2):
+                        if self.move in self.matrix[i][1] and self.move in self.matrix[i][2] and self.matrix[i][0] == '_':
+                            print(f'found win')
+                            pos_play(i, 0)
+                            break
+                        if self.move in self.matrix[i][0] and self.move in self.matrix[i][2] and self.matrix[i][1] == '_':
+                            print(f'found win')
+                            pos_play(i, 1)
+                            break
+                        if self.move in self.matrix[i][0] and self.move in self.matrix[i][1] and self.matrix[i][2] == '_':
+                            print(f'found win')
+                            pos_play(i, 2)
+                            break
+
+                    # check for win block
+                    if self.move == self.PLAY_X:
+                        other_player = self.PLAY_O
+                    else:
+                        other_player = self.PLAY_X
+
+                    for i in range(2):
+                        if other_player in self.matrix[i][1] and other_player in self.matrix[i][2] and self.matrix[i][0] == '_':
+                            print(f'found win block')
+                            pos_play(i, 0)
+                            break
+                        if other_player in self.matrix[i][0] and other_player in self.matrix[i][2] and self.matrix[i][1] == '_':
+                            print(f'found win block')
+                            pos_play(i, 1)
+                            break
+                        if other_player in self.matrix[i][0] and other_player in self.matrix[i][1] and self.matrix[i][2] == '_':
+                            print(f'found win block')
+                            pos_play(i, 2)
+                            break
+
+                    # diagonal check
+                    if other_player == self.matrix[1][1] and other_player == self.matrix[2][2] and self.matrix[0][0] == '_':
+                        print(f'found win block')
+                        pos_play(0, 0)
+                    if other_player == self.matrix[1][1] and other_player == self.matrix[0][0] and self.matrix[2][2] == '_':
+                        print(f'found win block')
+                        pos_play(2, 2)
+                    if other_player == self.matrix[1][1] and other_player == self.matrix[2][0] and self.matrix[0][2] == '_':
+                        print(f'found win block')
+                        pos_play(0, 2)
+                    if other_player == self.matrix[1][1] and other_player == self.matrix[0][2] and self.matrix[2][0] == '_':
+                        print(f'found win block')
+                        pos_play(2, 0)
+
+                    if self.move == current:
+                        random_play()
+
+                self.printBoard()
+                checkForCondition()
+
+            while not self.win_or_draw:
+
+                if user_input[1] == user_inputs.MEDIUM.value or user_input[1] == user_inputs.EASY.value:
+                    AI_move(user_input[1])
+                    if self.win_or_draw:
+                        break
+                    if user_input[2] == user_inputs.MEDIUM.value or user_input[2] == user_inputs.EASY.value:
+                        AI_move(user_input[2])
+                        if self.win_or_draw:
+                            break
+                    else:
+                        user_move()
+                        if self.win_or_draw:
+                            break
+                else:
+                    if user_input[1] == user_inputs.USER.value:
+                        user_move()
+                        if self.win_or_draw:
+                            break
+                        if user_input[2] == user_inputs.MEDIUM.value or user_input[2] == user_inputs.EASY.value:
+                            AI_move(user_input[2])
+                            if self.win_or_draw:
+                                break
+                        else:
+                            user_move()
+                            if self.win_or_draw:
+                                break
+  learner_created: true
+- name: test/__init__.py
+  visible: false
+  learner_created: false
+feedback_link: https://hyperskill.org/learn/step/7443#comment
+status: Solved
+feedback:
+  message: Well done! You've finished the project. Select a new project on <a href="https://hyperskill.org/projects">JetBrains
+    Academy</a> to continue learning.
+  time: Tue, 14 Mar 2023 12:12:08 UTC
+record: -1
